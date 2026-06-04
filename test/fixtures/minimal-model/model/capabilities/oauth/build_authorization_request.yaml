@@ -1,0 +1,3 @@
+name: Build authorization request
+events:
+  - authorization_requested

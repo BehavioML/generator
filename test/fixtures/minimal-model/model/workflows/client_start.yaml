@@ -1,0 +1,4 @@
+name: Client start
+steps:
+  - capability: oauth/build_authorization_request
+  - capability: oauth/redirect_to_authorization_server
