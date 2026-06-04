@@ -1,0 +1,17 @@
+name: Start authorization
+roles:
+  primary: client
+  participants:
+    - user_agent
+    - authorization_server
+steps:
+  - from: client
+    capability: oauth/build_authorization_request
+    label: Build authorization request
+  - from: client
+    to: user_agent
+    capability: oauth/redirect_to_authorization_server
+    label: Redirect to authorization server
+  - from: user_agent
+    to: authorization_server
+    capability: oauth/receive_authorization_request

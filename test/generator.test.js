@@ -115,3 +115,107 @@ test('CLI writes to --output', async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('workflow-sequence generates participants in workflow role order', async () => {
+  const model = await loadModel(fixtureModel);
+  const output = generateMermaid(model, 'workflow-sequence', { workflow: 'client/start_authorization' });
+
+  assert.match(output, /sequenceDiagram/);
+  assert.match(output, /participant client as Client\n  participant user_agent as User Agent\n  participant authorization_server as Authorization Server/);
+});
+
+test('workflow-sequence generates message for from and to', async () => {
+  const model = await loadModel(fixtureModel);
+  const output = generateMermaid(model, 'workflow-sequence', { workflow: 'client/start_authorization' });
+
+  assert.match(output, /client->>user_agent: Redirect to authorization server/);
+});
+
+test('workflow-sequence generates note for from only', async () => {
+  const model = await loadModel(fixtureModel);
+  const output = generateMermaid(model, 'workflow-sequence', { workflow: 'client/start_authorization' });
+
+  assert.match(output, /Note over client: Build authorization request/);
+});
+
+test('workflow-sequence falls back to humanized capability basename when label is missing', async () => {
+  const model = await loadModel(fixtureModel);
+  const output = generateMermaid(model, 'workflow-sequence', { workflow: 'client/start_authorization' });
+
+  assert.match(output, /user_agent->>authorization_server: Receive Authorization Request/);
+});
+
+test('workflow-sequence fails on legacy string step', async () => {
+  const model = await loadModel(fixtureModel);
+  const workflow = workflowVariant(model, { steps: ['oauth/build_authorization_request'] });
+  model.workflows.set(workflow.identity, workflow);
+
+  assert.throws(
+    () => generateMermaid(model, 'workflow-sequence', { workflow: workflow.identity }),
+    /workflow-sequence view requires object workflow steps; found legacy string step at workflows\/client\/start_authorization.yaml steps\[0\]/
+  );
+});
+
+test('workflow-sequence fails on missing from', async () => {
+  const model = await loadModel(fixtureModel);
+  const workflow = workflowVariant(model, { steps: [{ to: 'user_agent', label: 'Missing from' }] });
+  model.workflows.set(workflow.identity, workflow);
+
+  assert.throws(
+    () => generateMermaid(model, 'workflow-sequence', { workflow: workflow.identity }),
+    /workflow-sequence view requires from at workflows\/client\/start_authorization.yaml steps\[0\]/
+  );
+});
+
+test('workflow-sequence fails on invalid from role', async () => {
+  const model = await loadModel(fixtureModel);
+  const workflow = workflowVariant(model, { steps: [{ from: 'unknown', label: 'Invalid from' }] });
+  model.workflows.set(workflow.identity, workflow);
+
+  assert.throws(
+    () => generateMermaid(model, 'workflow-sequence', { workflow: workflow.identity }),
+    /workflow-sequence step uses undeclared from role "unknown" at workflows\/client\/start_authorization.yaml steps\[0\]/
+  );
+});
+
+test('workflow-sequence fails on invalid to role', async () => {
+  const model = await loadModel(fixtureModel);
+  const workflow = workflowVariant(model, { steps: [{ from: 'client', to: 'unknown', label: 'Invalid to' }] });
+  model.workflows.set(workflow.identity, workflow);
+
+  assert.throws(
+    () => generateMermaid(model, 'workflow-sequence', { workflow: workflow.identity }),
+    /workflow-sequence step uses undeclared to role "unknown" at workflows\/client\/start_authorization.yaml steps\[0\]/
+  );
+});
+
+test('workflow-sequence fails on unsupported at', async () => {
+  const model = await loadModel(fixtureModel);
+  const workflow = workflowVariant(model, { steps: [{ at: 'client', label: 'Unsupported at' }] });
+  model.workflows.set(workflow.identity, workflow);
+
+  assert.throws(
+    () => generateMermaid(model, 'workflow-sequence', { workflow: workflow.identity }),
+    /workflow-sequence does not support at; use from without to for local steps/
+  );
+});
+
+test('CLI exits 1 when --workflow is missing for workflow-sequence', () => {
+  const result = spawnSync(process.execPath, [cli, fixtureModel, '--format', 'mermaid', '--view', 'workflow-sequence'], {
+    encoding: 'utf8'
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /workflow-sequence view requires --workflow <workflow>/);
+});
+
+function workflowVariant(model, documentPatch) {
+  const base = model.workflows.get('client/start_authorization');
+  return {
+    ...base,
+    document: {
+      ...structuredClone(base.document),
+      ...documentPatch
+    }
+  };
+}

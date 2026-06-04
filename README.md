@@ -17,7 +17,7 @@ The [`BehavioML/specifications`](https://github.com/BehavioML/specifications) re
 - `examples/quic/model`
 - `examples/oauth-authorization-code/model`
 
-This generator reads those model directories and emits Mermaid text for selected relationship views.
+This generator reads those model directories and emits Mermaid text for selected documentation and inspection views.
 
 ## Relationship to BehavioML/validator
 
@@ -31,8 +31,8 @@ Use the validator before generating diagrams:
 
 ```bash
 behavioml-validate examples/oauth-authorization-code/model
-behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-capabilities
-behavioml-generate examples/oauth-authorization-code/model --format mermaid --view entity-state-machines
+behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-sequence --workflow client/start_authorization
+behavioml-generate examples/oauth-authorization-code/model --format mermaid --view state-machines
 ```
 
 ## Installation
@@ -46,7 +46,7 @@ npm install @behavioml/generator
 Or run with `npx`:
 
 ```bash
-npx @behavioml/generator examples/oauth-authorization-code/model --format mermaid --view workflow-capabilities
+npx @behavioml/generator examples/oauth-authorization-code/model --format mermaid --view workflow-sequence --workflow client/start_authorization
 ```
 
 For local development:
@@ -59,7 +59,7 @@ npm test
 ## CLI usage
 
 ```bash
-behavioml-generate <model-dir> --format mermaid --view <view> [--output <file>]
+behavioml-generate <model-dir> --format mermaid --view <view> [--workflow <workflow>] [--output <file>]
 ```
 
 Required options:
@@ -69,6 +69,7 @@ Required options:
 
 Optional options:
 
+- `--workflow <workflow>` — workflow identity for `workflow-sequence`, relative to `workflows/` and without `.yaml`.
 - `--output <file>` — write Mermaid text to a file instead of stdout.
 - `--help` / `-h` — show usage and examples.
 
@@ -80,17 +81,68 @@ Exit codes:
 
 ## Supported Mermaid views
 
-### `workflow-capabilities`
+### Documentation-grade views
 
-Shows `Workflow -> Capability` relationships from workflow `steps`.
+Use these views for human-facing documentation.
+
+#### `workflow-sequence`
+
+Shows a Mermaid `sequenceDiagram` for one selected workflow using object workflow steps.
 
 ```bash
-behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-capabilities
+behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-sequence --workflow client/start_authorization
 ```
 
-Missing capability references are rendered as placeholder nodes instead of failing generation.
+The `--workflow` argument identifies a workflow by path identity, relative to `workflows/`, without `.yaml`.
 
-### `state-machines`
+For example, object workflow steps such as:
+
+```yaml
+roles:
+  primary: client
+  participants:
+    - user_agent
+    - authorization_server
+
+steps:
+  - from: client
+    capability: oauth/build_authorization_request
+    label: Build authorization request
+
+  - from: client
+    to: user_agent
+    capability: oauth/redirect_to_authorization_server
+    label: Redirect to authorization server
+
+  - from: user_agent
+    to: authorization_server
+    capability: oauth/receive_authorization_request
+    label: Authorization request
+```
+
+produce Mermaid like:
+
+```mermaid
+sequenceDiagram
+  participant client as Client
+  participant user_agent as User Agent
+  participant authorization_server as Authorization Server
+
+  Note over client: Build authorization request
+  client->>user_agent: Redirect to authorization server
+  user_agent->>authorization_server: Authorization request
+```
+
+Workflow sequence diagrams intentionally render only declared object steps:
+
+- `from` + `to` renders an observable role-to-role interaction.
+- `from` without `to` renders a local note over that role.
+- `label` is used as the message/note text.
+- If `label` is missing, the generator falls back to the humanized capability basename.
+- Legacy string workflow steps are rejected because they are not sequence-diagrammable.
+- The generator does not infer omitted interactions, callbacks, retries, webhooks, broker delivery, protocol follow-up exchanges, or role direction from capability names.
+
+#### `state-machines`
 
 Shows BehavioML state machines as Mermaid `stateDiagram-v2` diagrams.
 
@@ -100,17 +152,21 @@ behavioml-generate examples/oauth-authorization-code/model --format mermaid --vi
 
 Array-valued transition `from` values are expanded into multiple Mermaid edges. Declared states without transitions are emitted as state declarations.
 
-### `entity-state-machines`
+### Inspection/debug views
 
-Shows `Entity -> StateMachine` ownership relationships from each state machine's `entity` reference.
+These relationship graph views remain available for model inspection and debugging, but they are not the primary workflow documentation views.
+
+#### `workflow-capabilities`
+
+Shows `Workflow -> Capability` relationships from workflow `steps`.
 
 ```bash
-behavioml-generate examples/oauth-authorization-code/model --format mermaid --view entity-state-machines
+behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-capabilities
 ```
 
-All entities and all state machines are emitted as nodes. Entities without state machines remain visible as isolated nodes. Missing entity references are rendered as placeholder nodes instead of failing generation.
+Missing capability references are rendered as placeholder nodes instead of failing generation.
 
-### `capability-events`
+#### `capability-events`
 
 Shows `Capability -> Event` relationships from capability `events`.
 
@@ -119,6 +175,16 @@ behavioml-generate examples/oauth-authorization-code/model --format mermaid --vi
 ```
 
 Missing event references are rendered as placeholder nodes instead of failing generation.
+
+#### `entity-state-machines`
+
+Shows `Entity -> StateMachine` ownership relationships from each state machine's `entity` reference.
+
+```bash
+behavioml-generate examples/oauth-authorization-code/model --format mermaid --view entity-state-machines
+```
+
+All entities and all state machines are emitted as nodes. Entities without state machines remain visible as isolated nodes. Missing entity references are rendered as placeholder nodes instead of failing generation.
 
 ## Model loading
 
@@ -149,12 +215,20 @@ capabilities: oauth/issue_access_token
 
 ## Examples
 
-Validate first, then generate Mermaid:
+Validate first, then generate Mermaid documentation views:
 
 ```bash
 behavioml-validate examples/oauth-authorization-code/model
-behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-capabilities
+behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-sequence --workflow client/start_authorization
 behavioml-generate examples/oauth-authorization-code/model --format mermaid --view state-machines --output oauth-states.mmd
+```
+
+Use relationship graph views when inspecting or debugging model relationships:
+
+```bash
+behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-capabilities
+behavioml-generate examples/oauth-authorization-code/model --format mermaid --view capability-events
+behavioml-generate examples/oauth-authorization-code/model --format mermaid --view entity-state-machines
 ```
 
 Generated output is plain Mermaid text and can be pasted into any Mermaid-compatible viewer.
