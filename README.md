@@ -32,6 +32,7 @@ Use the validator before generating diagrams:
 ```bash
 behavioml-validate examples/oauth-authorization-code/model
 behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-capabilities
+behavioml-generate examples/oauth-authorization-code/model --format mermaid --view entity-state-machines
 ```
 
 ## Installation
@@ -98,6 +99,16 @@ behavioml-generate examples/oauth-authorization-code/model --format mermaid --vi
 ```
 
 Array-valued transition `from` values are expanded into multiple Mermaid edges. Declared states without transitions are emitted as state declarations.
+
+### `entity-state-machines`
+
+Shows `Entity -> StateMachine` ownership relationships from each state machine's `entity` reference.
+
+```bash
+behavioml-generate examples/oauth-authorization-code/model --format mermaid --view entity-state-machines
+```
+
+All entities and all state machines are emitted as nodes. Entities without state machines remain visible as isolated nodes. Missing entity references are rendered as placeholder nodes instead of failing generation.
 
 ### `capability-events`
 

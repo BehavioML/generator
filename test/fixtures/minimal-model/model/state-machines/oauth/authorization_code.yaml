@@ -1,0 +1,8 @@
+entity: authorization_code
+states:
+  - requested
+  - issued
+transitions:
+  - from: requested
+    to: issued
+    on: authorization_code_issued
