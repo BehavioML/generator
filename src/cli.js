@@ -31,7 +31,7 @@ export async function runCli(argv, io = process) {
 
   try {
     const model = await loadModel(parsed.modelDir);
-    const output = generateMermaid(model, parsed.view, { workflow: parsed.workflow });
+    const output = generateMermaid(model, parsed.view, { workflow: parsed.workflow, expandUses: parsed.expandUses });
 
     if (parsed.output) {
       await mkdir(path.dirname(path.resolve(parsed.output)), { recursive: true });
@@ -55,6 +55,7 @@ export function parseArgs(argv) {
     view: undefined,
     output: undefined,
     workflow: undefined,
+    expandUses: undefined,
     help: false,
     error: undefined
   };
@@ -99,6 +100,11 @@ export function parseArgs(argv) {
       continue;
     }
 
+    if (arg === '--expand-uses') {
+      result.expandUses = readOptionalExpandUsesValue(args);
+      continue;
+    }
+
     if (arg?.startsWith('--')) {
       result.error = `Unknown option: ${arg}`;
       return result;
@@ -128,6 +134,16 @@ export function parseArgs(argv) {
   return result;
 }
 
+
+function readOptionalExpandUsesValue(args) {
+  const value = args[0];
+  if (value === 'one-level' || value === 'recursive') {
+    return args.shift();
+  }
+
+  return 'one-level';
+}
+
 function readOptionValue(args, option, result) {
   const value = args.shift();
   if (!value || value.startsWith('--')) {
@@ -142,7 +158,7 @@ function readOptionValue(args, option, result) {
 }
 
 function usageText() {
-  return 'Usage: behavioml-generate <model-dir> --format mermaid --view <view> [--workflow <workflow>] [--output <file>]';
+  return 'Usage: behavioml-generate <model-dir> --format mermaid --view <view> [--workflow <workflow>] [--expand-uses [one-level|recursive]] [--output <file>]';
 }
 
 function helpText() {
@@ -163,11 +179,13 @@ Supported views:
 
 Optional:
   --workflow <workflow>                    Workflow identity for workflow-sequence, relative to workflows/ without .yaml.
+  --expand-uses [one-level|recursive]      Expand ordered Capability.uses under workflow-sequence steps. Defaults to one-level when the flag is present.
   --output <file>                          Write Mermaid text to a file instead of stdout.
   --help, -h                               Show this help message.
 
 Examples:
   behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-sequence --workflow client/start_authorization
+  behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-sequence --workflow client/start_authorization --expand-uses recursive
   behavioml-generate examples/oauth-authorization-code/model --format mermaid --view state-machines --output oauth-states.mmd
   npx @behavioml/generator examples/quic/model --format mermaid --view capability-events
   behavioml-generate examples/oauth-authorization-code/model --format mermaid --view entity-state-machines

@@ -17,7 +17,7 @@ export function generateMermaid(model, view, options = {}) {
     case 'workflow-capabilities':
       return generateWorkflowCapabilities(model);
     case 'workflow-sequence':
-      return generateWorkflowSequence(model, options.workflow);
+      return generateWorkflowSequence(model, options.workflow, { expandUses: options.expandUses });
     case 'state-machines':
       return generateStateMachines(model);
     case 'capability-events':
