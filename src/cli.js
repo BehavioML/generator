@@ -149,6 +149,7 @@ Supported views:
   workflow-capabilities                    Flowchart of workflows to referenced capabilities.
   state-machines                           State diagrams for state machines.
   capability-events                        Flowchart of capabilities to declared events.
+  entity-state-machines                    Flowchart of entities to owned state machines.
 
 Optional:
   --output <file>                          Write Mermaid text to a file instead of stdout.
@@ -158,5 +159,6 @@ Examples:
   behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-capabilities
   behavioml-generate examples/oauth-authorization-code/model --format mermaid --view state-machines --output oauth-states.mmd
   npx @behavioml/generator examples/quic/model --format mermaid --view capability-events
+  behavioml-generate examples/oauth-authorization-code/model --format mermaid --view entity-state-machines
 `;
 }
