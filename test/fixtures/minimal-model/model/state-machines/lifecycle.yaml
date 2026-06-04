@@ -1,0 +1,18 @@
+states:
+  - requested
+  - issued
+  - redeemed
+  - rejected
+  - expired
+transitions:
+  - from: requested
+    to: issued
+    on: authorization_code_issued
+  - from:
+      - requested
+      - issued
+    to: rejected
+    on: authorization_code_rejected
+  - from: issued
+    to: redeemed
+    on: authorization_code_validated

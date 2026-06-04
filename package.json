@@ -1,0 +1,24 @@
+{
+  "name": "@behavioml/generator",
+  "version": "0.1.0",
+  "description": "Experimental BehavioML Mermaid diagram generator",
+  "type": "module",
+  "bin": {
+    "behavioml-generate": "./bin/behavioml-generate.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "behavioml",
+    "mermaid",
+    "generator"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
