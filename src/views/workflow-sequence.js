@@ -1,6 +1,10 @@
-import { escapeMermaidText, humanizeIdentity } from '../text.js';
+import { escapeMermaidText, humanizeIdentity, referenceIdentity } from '../text.js';
 
-export function generateWorkflowSequence(model, workflowIdentity) {
+const EXPAND_USES_NONE = 'none';
+const EXPAND_USES_ONE_LEVEL = 'one-level';
+const EXPAND_USES_RECURSIVE = 'recursive';
+
+export function generateWorkflowSequence(model, workflowIdentity, options = {}) {
   if (!workflowIdentity) {
     throw new Error('workflow-sequence view requires --workflow <workflow>');
   }
@@ -15,6 +19,7 @@ export function generateWorkflowSequence(model, workflowIdentity) {
     throw new Error(`workflow-sequence view requires steps in workflows/${workflow.identity}.yaml`);
   }
 
+  const expandUses = normalizeExpandUses(options.expandUses);
   const participants = workflowParticipants(workflow);
   const participantSet = new Set(participants);
   const source = `workflows/${workflow.identity}.yaml`;
@@ -60,9 +65,34 @@ export function generateWorkflowSequence(model, workflowIdentity) {
     } else {
       lines.push(`  Note over ${from}: ${label}`);
     }
+
+    const capabilityIdentity = referenceIdentity(step, ['capability', 'ref', 'identity', 'id', 'name']);
+    if (expandUses !== EXPAND_USES_NONE && capabilityIdentity) {
+      const expandedUses = expandedCapabilityUses(model, capabilityIdentity, expandUses);
+      if (expandedUses.length > 0) {
+        const noteParticipant = to ?? from;
+        lines.push(`  Note over ${noteParticipant}: ${expandedUses.map(formatExpandedUse).join('<br/>')}`);
+      }
+    }
   });
 
   return `${lines.join('\n').trimEnd()}\n`;
+}
+
+function normalizeExpandUses(expandUses) {
+  if (expandUses === true) {
+    return EXPAND_USES_ONE_LEVEL;
+  }
+
+  if (expandUses === undefined || expandUses === null || expandUses === false || expandUses === EXPAND_USES_NONE) {
+    return EXPAND_USES_NONE;
+  }
+
+  if (expandUses === EXPAND_USES_ONE_LEVEL || expandUses === EXPAND_USES_RECURSIVE) {
+    return expandUses;
+  }
+
+  throw new Error(`Unsupported workflow-sequence --expand-uses mode: ${expandUses}`);
 }
 
 function workflowParticipants(workflow) {
@@ -94,4 +124,64 @@ function stepLabel(step, source, index) {
   }
 
   throw new Error(`workflow-sequence step requires label or capability at ${source} steps[${index}]`);
+}
+
+function expandedCapabilityUses(model, capabilityIdentity, expandUses) {
+  const capability = model.capabilities.get(capabilityIdentity);
+  const uses = capabilityUses(capability);
+
+  if (uses.length === 0) {
+    return [];
+  }
+
+  return uses.flatMap((usedIdentity, index) => expandCapabilityUse(model, usedIdentity, `${index + 1}`, expandUses, [capabilityIdentity]));
+}
+
+function expandCapabilityUse(model, capabilityIdentity, number, expandUses, ancestors) {
+  const rows = [{ number, label: capabilityLabel(model, capabilityIdentity) }];
+
+  if (expandUses !== EXPAND_USES_RECURSIVE) {
+    return rows;
+  }
+
+  if (ancestors.includes(capabilityIdentity)) {
+    rows[0].cycle = true;
+    return rows;
+  }
+
+  const capability = model.capabilities.get(capabilityIdentity);
+  const uses = capabilityUses(capability);
+  return [
+    ...rows,
+    ...uses.flatMap((usedIdentity, index) => expandCapabilityUse(
+      model,
+      usedIdentity,
+      `${number}.${index + 1}`,
+      expandUses,
+      [...ancestors, capabilityIdentity]
+    ))
+  ];
+}
+
+function capabilityUses(capability) {
+  if (!Array.isArray(capability?.document?.uses)) {
+    return [];
+  }
+
+  return capability.document.uses
+    .map((use) => referenceIdentity(use, ['capability', 'ref', 'identity', 'id', 'name']))
+    .filter((identity) => typeof identity === 'string' && identity.length > 0);
+}
+
+function capabilityLabel(model, capabilityIdentity) {
+  const capability = model.capabilities.get(capabilityIdentity);
+  const name = capability?.document?.name;
+  return escapeMermaidText(typeof name === 'string' && name.length > 0
+    ? name
+    : humanizeIdentity(capabilityIdentity.split('/').at(-1)));
+}
+
+function formatExpandedUse(row) {
+  const suffix = row.cycle ? ' (cycle detected)' : '';
+  return `${row.number}. ${row.label}${suffix}`;
 }

@@ -59,7 +59,7 @@ npm test
 ## CLI usage
 
 ```bash
-behavioml-generate <model-dir> --format mermaid --view <view> [--workflow <workflow>] [--output <file>]
+behavioml-generate <model-dir> --format mermaid --view <view> [--workflow <workflow>] [--expand-uses [one-level|recursive]] [--output <file>]
 ```
 
 Required options:
@@ -70,6 +70,7 @@ Required options:
 Optional options:
 
 - `--workflow <workflow>` — workflow identity for `workflow-sequence`, relative to `workflows/` and without `.yaml`.
+- `--expand-uses [one-level|recursive]` — for `workflow-sequence`, expand ordered `Capability.uses` under each workflow step. A bare `--expand-uses` is equivalent to `--expand-uses one-level`.
 - `--output <file>` — write Mermaid text to a file instead of stdout.
 - `--help` / `-h` — show usage and examples.
 
@@ -141,6 +142,10 @@ Workflow sequence diagrams intentionally render only declared object steps:
 - If `label` is missing, the generator falls back to the humanized capability basename.
 - Legacy string workflow steps are rejected because they are not sequence-diagrammable.
 - The generator does not infer omitted interactions, callbacks, retries, webhooks, broker delivery, protocol follow-up exchanges, or role direction from capability names.
+
+Use `--expand-uses` or `--expand-uses one-level` to add a note under each workflow step whose referenced capability declares `uses`. The note renders `Capability.uses` in declared order and attaches the list to the receiving role for role-to-role steps, or the local role for `from`-only steps. Use `--expand-uses recursive` to expand uses transitively; recursive expansion marks cycles and stops following that path.
+
+Expanded uses represent **ordered internal decomposition**. They do **not** represent role interactions, messages, callbacks, or inferred control flow, and they are not rendered as independent role-to-role messages.
 
 #### `state-machines`
 

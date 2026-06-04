@@ -200,6 +200,134 @@ test('workflow-sequence fails on unsupported at', async () => {
   );
 });
 
+test('workflow-sequence expands direct capability uses as a note attached to the workflow step recipient', async () => {
+  const model = await loadModel(fixtureModel);
+  addCapability(model, 'oauth/receive_authorization_request', {
+    name: 'Receive authorization request',
+    uses: [
+      'oauth/validate_authorization_request',
+      'oauth/create_authorization_code'
+    ]
+  });
+  addCapability(model, 'oauth/validate_authorization_request', { name: 'Validate Authorization Request' });
+  addCapability(model, 'oauth/create_authorization_code', { name: 'Create Authorization Code' });
+
+  const output = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'client/start_authorization',
+    expandUses: 'one-level'
+  });
+
+  assert.match(output, /user_agent->>authorization_server: Receive Authorization Request/);
+  assert.match(output, /Note over authorization_server: 1\. Validate Authorization Request<br\/>2\. Create Authorization Code/);
+});
+
+test('workflow-sequence preserves declared Capability.uses ordering', async () => {
+  const model = await loadModel(fixtureModel);
+  addCapability(model, 'oauth/receive_authorization_request', {
+    uses: [
+      'oauth/first_internal_step',
+      'oauth/second_internal_step',
+      'oauth/third_internal_step'
+    ]
+  });
+  addCapability(model, 'oauth/first_internal_step', { name: 'First Internal Step' });
+  addCapability(model, 'oauth/second_internal_step', { name: 'Second Internal Step' });
+  addCapability(model, 'oauth/third_internal_step', { name: 'Third Internal Step' });
+
+  const output = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'client/start_authorization',
+    expandUses: true
+  });
+
+  assert.ok(output.indexOf('1. First Internal Step') < output.indexOf('2. Second Internal Step'));
+  assert.ok(output.indexOf('2. Second Internal Step') < output.indexOf('3. Third Internal Step'));
+});
+
+test('workflow-sequence recursively expands transitive Capability.uses', async () => {
+  const model = await loadModel(fixtureModel);
+  addCapability(model, 'oauth/receive_authorization_request', {
+    uses: ['oauth/validate_authorization_request']
+  });
+  addCapability(model, 'oauth/validate_authorization_request', {
+    name: 'Validate Authorization Request',
+    uses: ['oauth/check_redirect_uri']
+  });
+  addCapability(model, 'oauth/check_redirect_uri', { name: 'Check Redirect URI' });
+
+  const output = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'client/start_authorization',
+    expandUses: 'recursive'
+  });
+
+  assert.match(output, /Note over authorization_server: 1\. Validate Authorization Request<br\/>1\.1\. Check Redirect URI/);
+});
+
+test('workflow-sequence recursive uses expansion detects cycles without infinite recursion', async () => {
+  const model = await loadModel(fixtureModel);
+  addCapability(model, 'oauth/receive_authorization_request', {
+    uses: ['oauth/validate_authorization_request']
+  });
+  addCapability(model, 'oauth/validate_authorization_request', {
+    name: 'Validate Authorization Request',
+    uses: ['oauth/check_redirect_uri']
+  });
+  addCapability(model, 'oauth/check_redirect_uri', {
+    name: 'Check Redirect URI',
+    uses: ['oauth/validate_authorization_request']
+  });
+
+  const output = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'client/start_authorization',
+    expandUses: 'recursive'
+  });
+
+  assert.match(output, /1\.1\.1\. Validate Authorization Request \(cycle detected\)/);
+});
+
+test('workflow-sequence keeps interaction workflow steps as messages when uses are expanded', async () => {
+  const model = await loadModel(fixtureModel);
+  addCapability(model, 'oauth/redirect_to_authorization_server', {
+    uses: ['oauth/build_authorization_uri']
+  });
+  addCapability(model, 'oauth/build_authorization_uri', { name: 'Build Authorization URI' });
+
+  const output = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'client/start_authorization',
+    expandUses: 'one-level'
+  });
+
+  assert.match(output, /client->>user_agent: Redirect to authorization server/);
+});
+
+test('workflow-sequence does not render Capability.uses as independent messages', async () => {
+  const model = await loadModel(fixtureModel);
+  addCapability(model, 'oauth/redirect_to_authorization_server', {
+    uses: ['oauth/build_authorization_uri']
+  });
+  addCapability(model, 'oauth/build_authorization_uri', { name: 'Build Authorization URI' });
+
+  const output = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'client/start_authorization',
+    expandUses: 'one-level'
+  });
+
+  assert.match(output, /Note over user_agent: 1\. Build Authorization URI/);
+  assert.doesNotMatch(output, /->>.*Build Authorization URI/);
+});
+
+test('workflow-sequence default output does not expand Capability.uses', async () => {
+  const model = await loadModel(fixtureModel);
+  addCapability(model, 'oauth/redirect_to_authorization_server', {
+    uses: ['oauth/build_authorization_uri']
+  });
+  addCapability(model, 'oauth/build_authorization_uri', { name: 'Build Authorization URI' });
+
+  const output = generateMermaid(model, 'workflow-sequence', { workflow: 'client/start_authorization' });
+
+  assert.match(output, /client->>user_agent: Redirect to authorization server/);
+  assert.doesNotMatch(output, /Build Authorization URI/);
+});
+
 test('CLI exits 1 when --workflow is missing for workflow-sequence', () => {
   const result = spawnSync(process.execPath, [cli, fixtureModel, '--format', 'mermaid', '--view', 'workflow-sequence'], {
     encoding: 'utf8'
@@ -208,6 +336,15 @@ test('CLI exits 1 when --workflow is missing for workflow-sequence', () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /workflow-sequence view requires --workflow <workflow>/);
 });
+
+function addCapability(model, identity, document) {
+  model.capabilities.set(identity, {
+    scope: 'capabilities',
+    identity,
+    file: `${fixtureModel}/capabilities/${identity}.yaml`,
+    document
+  });
+}
 
 function workflowVariant(model, documentPatch) {
   const base = model.workflows.get('client/start_authorization');
