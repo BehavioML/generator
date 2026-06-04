@@ -31,7 +31,7 @@ export async function runCli(argv, io = process) {
 
   try {
     const model = await loadModel(parsed.modelDir);
-    const output = generateMermaid(model, parsed.view);
+    const output = generateMermaid(model, parsed.view, { workflow: parsed.workflow });
 
     if (parsed.output) {
       await mkdir(path.dirname(path.resolve(parsed.output)), { recursive: true });
@@ -54,6 +54,7 @@ export function parseArgs(argv) {
     format: undefined,
     view: undefined,
     output: undefined,
+    workflow: undefined,
     help: false,
     error: undefined
   };
@@ -84,6 +85,14 @@ export function parseArgs(argv) {
 
     if (arg === '--output') {
       result.output = readOptionValue(args, arg, result);
+      if (result.error) {
+        return result;
+      }
+      continue;
+    }
+
+    if (arg === '--workflow') {
+      result.workflow = readOptionValue(args, arg, result);
       if (result.error) {
         return result;
       }
@@ -133,7 +142,7 @@ function readOptionValue(args, option, result) {
 }
 
 function usageText() {
-  return 'Usage: behavioml-generate <model-dir> --format mermaid --view <view> [--output <file>]';
+  return 'Usage: behavioml-generate <model-dir> --format mermaid --view <view> [--workflow <workflow>] [--output <file>]';
 }
 
 function helpText() {
@@ -146,17 +155,19 @@ Required options:
   --view <view>                            View to generate.
 
 Supported views:
-  workflow-capabilities                    Flowchart of workflows to referenced capabilities.
-  state-machines                           State diagrams for state machines.
-  capability-events                        Flowchart of capabilities to declared events.
-  entity-state-machines                    Flowchart of entities to owned state machines.
+  state-machines                           Documentation-grade state diagrams for state machines.
+  workflow-sequence                        Documentation-grade sequence diagram for one workflow.
+  workflow-capabilities                    Inspection/debug flowchart of workflows to referenced capabilities.
+  capability-events                        Inspection/debug flowchart of capabilities to declared events.
+  entity-state-machines                    Inspection/debug flowchart of entities to owned state machines.
 
 Optional:
+  --workflow <workflow>                    Workflow identity for workflow-sequence, relative to workflows/ without .yaml.
   --output <file>                          Write Mermaid text to a file instead of stdout.
   --help, -h                               Show this help message.
 
 Examples:
-  behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-capabilities
+  behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-sequence --workflow client/start_authorization
   behavioml-generate examples/oauth-authorization-code/model --format mermaid --view state-machines --output oauth-states.mmd
   npx @behavioml/generator examples/quic/model --format mermaid --view capability-events
   behavioml-generate examples/oauth-authorization-code/model --format mermaid --view entity-state-machines

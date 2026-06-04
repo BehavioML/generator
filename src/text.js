@@ -44,3 +44,18 @@ export function referenceIdentity(value, candidateKeys = ['ref', 'identity', 'ca
 
   return undefined;
 }
+
+export function humanizeIdentity(identity) {
+  return String(identity ?? '')
+    .split(/[\s_/-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+export function escapeMermaidText(text) {
+  return String(text ?? '')
+    .replaceAll('\\', '\\\\')
+    .replaceAll(':', '\\:')
+    .replaceAll('\n', ' ');
+}
