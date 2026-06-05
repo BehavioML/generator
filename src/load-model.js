@@ -1,25 +1,13 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import YAML from 'yaml';
+import { emptyModelIndex, MODEL_SCOPES, normalizeModelIdentity, YAML_EXTENSIONS } from './model.js';
 
-export const MODEL_SCOPES = [
-  'workflows',
-  'roles',
-  'capabilities',
-  'interfaces',
-  'components',
-  'modules',
-  'events',
-  'entities',
-  'state-machines',
-  'decisions'
-];
-
-const YAML_EXTENSIONS = new Set(['.yaml', '.yml']);
+export { emptyModelIndex, MODEL_SCOPES, modelIndexFromEntries, normalizeModelIdentity, YAML_EXTENSIONS } from './model.js';
 
 export async function loadModel(modelDir) {
   const root = path.resolve(modelDir);
-  const index = Object.fromEntries(MODEL_SCOPES.map((scope) => [scope, new Map()]));
+  const index = emptyModelIndex();
 
   await Promise.all(MODEL_SCOPES.map(async (scope) => {
     const scopeDir = path.join(root, scope);
@@ -28,7 +16,7 @@ export async function loadModel(modelDir) {
     }
 
     for await (const file of walkYamlFiles(scopeDir)) {
-      const identity = normalizeIdentity(path.relative(scopeDir, file));
+      const identity = normalizeModelIdentity(path.relative(scopeDir, file));
       const source = await readFile(file, 'utf8');
       const document = YAML.parse(source) ?? {};
       index[scope].set(identity, {
@@ -72,10 +60,4 @@ async function* walkYamlFiles(directory) {
       yield fullPath;
     }
   }
-}
-
-function normalizeIdentity(relativeFile) {
-  const parsed = path.parse(relativeFile);
-  const withoutExtension = path.join(parsed.dir, parsed.name);
-  return withoutExtension.split(path.sep).join('/');
 }

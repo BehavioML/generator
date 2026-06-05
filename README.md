@@ -56,6 +56,42 @@ npm install
 npm test
 ```
 
+
+## SDK usage
+
+Explorer and other embedders should consume generator-owned outputs through the SDK instead of reimplementing diagram semantics. The SDK accepts already-loaded workspace files, performs no filesystem IO, and returns structured artifacts with generated content plus per-artifact diagnostics.
+
+```js
+import { generateWorkspaceArtifacts } from '@behavioml/generator';
+
+const artifacts = await generateWorkspaceArtifacts([
+  {
+    path: 'model/workflows/client/start_authorization.yaml',
+    content: workflowYaml
+  },
+  {
+    path: 'model/capabilities/oauth/build_authorization_request.yaml',
+    content: capabilityYaml
+  }
+], {
+  artifacts: ['workflow-sequence:client/start_authorization'],
+  formats: ['mermaid'],
+  expandUses: 'one-level'
+});
+```
+
+Public SDK exports:
+
+- `generateWorkspaceArtifacts(files, options)` — primary embeddable entrypoint for already-loaded workspace files.
+- `loadWorkspaceModel(files)` — parses already-loaded files into the generator's in-memory model index.
+- `generateModelArtifacts(model, options)` — generates structured artifacts from an in-memory model index.
+- `generateMermaid(model, view, options)` — lower-level Mermaid text generation for an already-loaded model.
+- `SUPPORTED_VIEWS`, `DEFAULT_GENERATOR_ARTIFACTS`, and `GENERATOR_ARTIFACT_FORMATS` — supported view/artifact metadata.
+
+Workspace files use the same scope and identity rules as CLI model loading. Files under `generated` are ignored. Supported artifact filters are the view names documented below and `workflow-sequence:<workflow-id>` for a single workflow sequence artifact. Mermaid is currently the only generated artifact format; unsupported requested formats are reported as diagnostics.
+
+The CLI remains responsible for argument parsing, filesystem loading/writing, and process exit codes. The SDK deliberately does not validate BehavioML models; run `@behavioml/validator` first when validation is required.
+
 ## CLI usage
 
 ```bash

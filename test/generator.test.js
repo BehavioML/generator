@@ -1,11 +1,11 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
-import { generateMermaid, loadModel } from '../src/index.js';
+import { generateMermaid, generateWorkspaceArtifacts, loadModel, loadWorkspaceModel } from '../src/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureModel = path.join(__dirname, 'fixtures', 'minimal-model', 'model');
@@ -114,6 +114,52 @@ test('CLI writes to --output', async () => {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+
+test('SDK generates a workflow sequence artifact from already-loaded workspace files', async () => {
+  const files = await fixtureWorkspaceFiles();
+  const artifacts = await generateWorkspaceArtifacts(files, {
+    artifacts: ['workflow-sequence:client/start_authorization'],
+    formats: ['mermaid']
+  });
+
+  assert.equal(artifacts.length, 1);
+  assert.equal(artifacts[0].kind, 'workflow-sequence');
+  assert.equal(artifacts[0].format, 'mermaid');
+  assert.equal(artifacts[0].path, 'generated/workflows/client/start_authorization.mmd');
+  assert.deepEqual(artifacts[0].sourceEntity, { kind: 'workflow', id: 'client/start_authorization' });
+  assert.match(artifacts[0].content, /sequenceDiagram/);
+  assert.match(artifacts[0].content, /client->>user_agent: Redirect to authorization server/);
+  assert.equal(artifacts[0].diagnostics, undefined);
+});
+
+test('SDK workspace model loading ignores generated files and derives scoped identities', async () => {
+  const model = loadWorkspaceModel([
+    { path: 'model/workflows/client/start_authorization.yaml', content: 'steps: []' },
+    { path: 'model/workflows/generated/ignored.yaml', content: 'steps: []' },
+    { path: 'model/capabilities/oauth/build_authorization_request.yml', content: 'name: Build authorization request' }
+  ]);
+
+  assert.equal(model.workflows.has('client/start_authorization'), true);
+  assert.equal(model.workflows.has('generated/ignored'), false);
+  assert.equal(model.capabilities.has('oauth/build_authorization_request'), true);
+});
+
+test('SDK returns artifact diagnostics instead of throwing for generation errors', async () => {
+  const artifacts = await generateWorkspaceArtifacts([
+    { path: 'model/workflows/legacy.yaml', content: `steps:
+  - oauth/build_authorization_request
+` }
+  ], {
+    artifacts: ['workflow-sequence:legacy'],
+    formats: ['mermaid']
+  });
+
+  assert.equal(artifacts.length, 1);
+  assert.equal(artifacts[0].kind, 'workflow-sequence');
+  assert.equal(artifacts[0].content, '');
+  assert.match(artifacts[0].diagnostics[0].message, /workflow-sequence view requires object workflow steps/);
 });
 
 test('workflow-sequence generates participants in workflow role order', async () => {
@@ -336,6 +382,27 @@ test('CLI exits 1 when --workflow is missing for workflow-sequence', () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /workflow-sequence view requires --workflow <workflow>/);
 });
+
+
+async function fixtureWorkspaceFiles(directory = fixtureModel, prefix = 'model') {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    const workspacePath = `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      files.push(...await fixtureWorkspaceFiles(fullPath, workspacePath));
+      continue;
+    }
+
+    if (entry.isFile()) {
+      files.push({ path: workspacePath, content: await readFile(fullPath, 'utf8') });
+    }
+  }
+
+  return files;
+}
 
 function addCapability(model, identity, document) {
   model.capabilities.set(identity, {
