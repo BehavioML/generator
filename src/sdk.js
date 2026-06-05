@@ -1,6 +1,7 @@
 import YAML from 'yaml';
 import { generateMermaid, SUPPORTED_VIEWS } from './mermaid.js';
 import { MODEL_SCOPES, modelIndexFromEntries, normalizeModelIdentity } from './model.js';
+import { generateSourceMap } from './source-map.js';
 
 /**
  * @typedef {object} GeneratorWorkspaceFile
@@ -20,7 +21,15 @@ import { MODEL_SCOPES, modelIndexFromEntries, normalizeModelIdentity } from './m
  * @property {string=} title Human-readable artifact title.
  * @property {string} content Generated artifact content.
  * @property {{ kind: string, id: string }=} sourceEntity Source BehavioML entity when an artifact maps to one entity.
+ * @property {readonly GeneratorArtifactSourceMapEntry[]=} sourceMap Stable diagram-to-BehavioML source-map metadata for consumers that render Mermaid themselves.
  * @property {readonly GeneratorDiagnostic[]=} diagnostics Non-fatal diagnostics for this artifact.
+ *
+ * @typedef {object} GeneratorArtifactSourceMapEntry
+ * @property {string} diagramId Stable Mermaid/SVG-safe diagram element identifier owned by the generator.
+ * @property {'source' | 'target' | 'participant' | 'step' | 'edge' | 'state' | 'transition' | 'entity'} role Diagram role for the mapped element.
+ * @property {{ scope: string, identity: string }} entity BehavioML path-identity target.
+ * @property {string=} fieldPath Source field path when the diagram element maps to a specific model field.
+ * @property {string=} label Human-readable label associated with the diagram element.
  *
  * @typedef {object} GenerateWorkspaceArtifactsOptions
  * @property {readonly string[]=} artifacts Artifact kinds to generate. Use a view name or `workflow-sequence:<workflow-id>`.
@@ -142,13 +151,15 @@ function generateSingleArtifact(model, kind, options) {
   try {
     const content = generateMermaid(model, kind, options);
     const sourceEntity = sourceEntityFor(kind, options);
+    const sourceMap = generateSourceMap(model, kind, options);
     return {
       kind,
       format: 'mermaid',
       path: artifactPath(kind, options),
       title: artifactTitle(kind, options),
       content,
-      ...(sourceEntity ? { sourceEntity } : {})
+      ...(sourceEntity ? { sourceEntity } : {}),
+      ...(sourceMap?.length ? { sourceMap } : {})
     };
   } catch (error) {
     const sourceEntity = sourceEntityFor(kind, options);
