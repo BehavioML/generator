@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { generateMermaid, loadModel, SUPPORTED_VIEWS } from './index.js';
+import { generateModelArtifacts, loadModel, SUPPORTED_VIEWS } from './index.js';
 
 export const EXIT_SUCCESS = 0;
 export const EXIT_GENERATION_ERROR = 1;
@@ -30,8 +30,21 @@ export async function runCli(argv, io = process) {
   }
 
   try {
+    if (parsed.view === 'workflow-sequence' && !parsed.workflow) {
+      throw new Error('workflow-sequence view requires --workflow <workflow>');
+    }
+
     const model = await loadModel(parsed.modelDir);
-    const output = generateMermaid(model, parsed.view, { workflow: parsed.workflow, expandUses: parsed.expandUses });
+    const [artifact] = generateModelArtifacts(model, {
+      artifacts: [parsed.view],
+      workflow: parsed.workflow,
+      expandUses: parsed.expandUses
+    });
+    const diagnostic = artifact?.diagnostics?.[0];
+    if (diagnostic) {
+      throw new Error(diagnostic.message);
+    }
+    const output = artifact.content;
 
     if (parsed.output) {
       await mkdir(path.dirname(path.resolve(parsed.output)), { recursive: true });

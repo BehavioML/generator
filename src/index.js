@@ -6,3 +6,5 @@ export { generateStateMachines } from './views/state-machines.js';
 export { generateCapabilityEvents } from './views/capability-events.js';
 export { generateEntityStateMachines } from './views/entity-state-machines.js';
 export { escapeLabel, escapeMermaidText, humanizeIdentity, safeNodeId } from './text.js';
+export { DEFAULT_GENERATOR_ARTIFACTS, GENERATOR_ARTIFACT_FORMATS, generateModelArtifacts, generateWorkspaceArtifacts, loadWorkspaceModel } from './sdk.js';
+export { emptyModelIndex, modelIndexFromEntries, normalizeModelIdentity, YAML_EXTENSIONS } from './model.js';
