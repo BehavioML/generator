@@ -134,6 +134,110 @@ test('SDK generates a workflow sequence artifact from already-loaded workspace f
   assert.equal(artifacts[0].diagnostics, undefined);
 });
 
+test('SDK workflow sequence artifacts include stable source-map metadata', async () => {
+  const files = await fixtureWorkspaceFiles();
+  const [artifact] = await generateWorkspaceArtifacts(files, {
+    artifacts: ['workflow-sequence:client/start_authorization'],
+    formats: ['mermaid']
+  });
+
+  assert.ok(Array.isArray(artifact.sourceMap));
+  assert.ok(artifact.sourceMap.length > 0);
+
+  const workflowEntry = findSourceMapEntry(artifact.sourceMap, {
+    role: 'entity',
+    scope: 'workflows',
+    identity: 'client/start_authorization'
+  });
+  assert.equal(workflowEntry.diagramId, 'workflow-client-start-authorization');
+  assert.equal(workflowEntry.label, 'Start authorization');
+
+  const participantEntry = findSourceMapEntry(artifact.sourceMap, {
+    role: 'participant',
+    scope: 'roles',
+    identity: 'authorization_server'
+  });
+  assert.equal(participantEntry.diagramId, 'participant-authorization-server');
+  assert.equal(participantEntry.label, 'Authorization Server');
+
+  const capabilityEntry = findSourceMapEntry(artifact.sourceMap, {
+    role: 'target',
+    scope: 'capabilities',
+    identity: 'oauth/build_authorization_request',
+    fieldPath: 'steps[0].capability'
+  });
+  assert.equal(capabilityEntry.diagramId, 'workflow-step-capability-client-start-authorization-0-oauth-build-authorization-request');
+  assert.equal(capabilityEntry.label, 'Build authorization request');
+
+  assert.deepEqual(findSourceMapEntry(artifact.sourceMap, {
+    role: 'source',
+    scope: 'roles',
+    identity: 'client',
+    fieldPath: 'steps[0].from'
+  }).entity, { scope: 'roles', identity: 'client' });
+
+  assert.deepEqual(findSourceMapEntry(artifact.sourceMap, {
+    role: 'target',
+    scope: 'roles',
+    identity: 'user_agent',
+    fieldPath: 'steps[1].to'
+  }).entity, { scope: 'roles', identity: 'user_agent' });
+});
+
+test('SDK source-map diagram ids are stable and safe', async () => {
+  const files = await fixtureWorkspaceFiles();
+  const [firstArtifact] = await generateWorkspaceArtifacts(files, {
+    artifacts: ['workflow-sequence:client/start_authorization'],
+    formats: ['mermaid']
+  });
+  const [secondArtifact] = await generateWorkspaceArtifacts(files, {
+    artifacts: ['workflow-sequence:client/start_authorization'],
+    formats: ['mermaid']
+  });
+
+  assert.deepEqual(
+    firstArtifact.sourceMap.map((entry) => entry.diagramId),
+    secondArtifact.sourceMap.map((entry) => entry.diagramId)
+  );
+
+  for (const entry of firstArtifact.sourceMap) {
+    assert.match(entry.diagramId, /^[A-Za-z][A-Za-z0-9-]*$/);
+  }
+});
+
+test('SDK state-machine artifacts include state, transition, and event source-map metadata', async () => {
+  const files = await fixtureWorkspaceFiles();
+  const [artifact] = await generateWorkspaceArtifacts(files, {
+    artifacts: ['state-machines'],
+    formats: ['mermaid']
+  });
+
+  assert.ok(Array.isArray(artifact.sourceMap));
+  assert.deepEqual(findSourceMapEntry(artifact.sourceMap, {
+    role: 'entity',
+    scope: 'state-machines',
+    identity: 'lifecycle'
+  }).entity, { scope: 'state-machines', identity: 'lifecycle' });
+  assert.equal(findSourceMapEntry(artifact.sourceMap, {
+    role: 'state',
+    scope: 'state-machines',
+    identity: 'lifecycle',
+    fieldPath: 'states[0]'
+  }).diagramId, 'state-lifecycle-requested');
+  assert.equal(findSourceMapEntry(artifact.sourceMap, {
+    role: 'transition',
+    scope: 'state-machines',
+    identity: 'lifecycle',
+    fieldPath: 'transitions[1].from[0]'
+  }).label, 'requested → rejected: authorization_code_rejected');
+  assert.equal(findSourceMapEntry(artifact.sourceMap, {
+    role: 'edge',
+    scope: 'events',
+    identity: 'authorization_code_rejected',
+    fieldPath: 'transitions[1].on'
+  }).diagramId, 'transition-event-lifecycle-1-authorization-code-rejected');
+});
+
 test('SDK workspace model loading ignores generated files and derives scoped identities', async () => {
   const model = loadWorkspaceModel([
     { path: 'model/workflows/client/start_authorization.yaml', content: 'steps: []' },
@@ -383,6 +487,22 @@ test('CLI exits 1 when --workflow is missing for workflow-sequence', () => {
   assert.match(result.stderr, /workflow-sequence view requires --workflow <workflow>/);
 });
 
+function findSourceMapEntry(sourceMap, expected) {
+  const entry = sourceMap.find((candidate) => Object.entries(expected).every(([key, value]) => {
+    if (key === 'scope') {
+      return candidate.entity?.scope === value;
+    }
+
+    if (key === 'identity') {
+      return candidate.entity?.identity === value;
+    }
+
+    return candidate[key] === value;
+  }));
+
+  assert.ok(entry, `Missing source-map entry: ${JSON.stringify(expected)}`);
+  return entry;
+}
 
 async function fixtureWorkspaceFiles(directory = fixtureModel, prefix = 'model') {
   const entries = await readdir(directory, { withFileTypes: true });

@@ -90,6 +90,10 @@ Public SDK exports:
 
 Workspace files use the same scope and identity rules as CLI model loading. Files under `generated` are ignored. Supported artifact filters are the view names documented below and `workflow-sequence:<workflow-id>` for a single workflow sequence artifact. Mermaid is currently the only generated artifact format; unsupported requested formats are reported as diagnostics.
 
+Generated SDK artifacts may also include a `sourceMap` array. This metadata is owned by the generator and maps stable, Mermaid/SVG-safe diagram element identifiers back to BehavioML path identities and, when applicable, specific source fields such as `steps[0].capability`. Consumers such as BehavioML Explorer should use `sourceMap` when making browser-rendered Mermaid SVG diagrams clickable: the generator owns BehavioML-to-diagram semantics, diagram element identity, and model source mapping, while Explorer or another consumer owns Mermaid rendering, SVG DOM event handling, and navigation. Consumers should not infer BehavioML semantics from raw Mermaid text or from rendered SVG heuristics.
+
+The default CLI writes Mermaid text only. Source-map metadata is available through SDK artifacts and is not appended to CLI Mermaid output.
+
 The CLI remains responsible for argument parsing, filesystem loading/writing, and process exit codes. The SDK deliberately does not validate BehavioML models; run `@behavioml/validator` first when validation is required.
 
 ## CLI usage
