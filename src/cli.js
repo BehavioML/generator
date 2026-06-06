@@ -189,6 +189,7 @@ Supported views:
   workflow-capabilities                    Inspection/debug flowchart of workflows to referenced capabilities.
   capability-events                        Inspection/debug flowchart of capabilities to declared events.
   entity-state-machines                    Inspection/debug flowchart of entities to owned state machines.
+  semantic-area-workflows                  Inspection/debug flowchart of semantic areas to directly listed workflows.
 
 Optional:
   --workflow <workflow>                    Workflow identity for workflow-sequence, relative to workflows/ without .yaml.
@@ -202,5 +203,6 @@ Examples:
   behavioml-generate examples/oauth-authorization-code/model --format mermaid --view state-machines --output oauth-states.mmd
   npx @behavioml/generator examples/quic/model --format mermaid --view capability-events
   behavioml-generate examples/oauth-authorization-code/model --format mermaid --view entity-state-machines
+  behavioml-generate examples/quic/model --format mermaid --view semantic-area-workflows
 `;
 }
