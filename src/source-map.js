@@ -12,6 +12,8 @@ export function generateSourceMap(model, kind, options = {}) {
       return capabilityEventsSourceMap(model);
     case 'entity-state-machines':
       return entityStateMachinesSourceMap(model);
+    case 'semantic-area-workflows':
+      return semanticAreaWorkflowsSourceMap(model, options.semanticArea);
     default:
       return undefined;
   }
@@ -222,6 +224,51 @@ function capabilityEventsSourceMap(model) {
         identity: eventIdentity,
         fieldPath: `events[${index}]`,
         label: eventIdentity
+      }));
+    }
+  }
+
+  return entries;
+}
+
+
+function semanticAreaWorkflowsSourceMap(model, semanticAreaIdentity) {
+  const entries = [];
+  const semanticAreas = semanticAreaIdentity
+    ? [model['semantic-areas'].get(semanticAreaIdentity)].filter(Boolean)
+    : [...model['semantic-areas'].values()];
+
+  for (const semanticArea of semanticAreas) {
+    entries.push(sourceMapEntry({
+      diagramId: safeDiagramId('semantic-area', semanticArea.identity),
+      role: 'entity',
+      scope: 'semantic-areas',
+      identity: semanticArea.identity,
+      label: semanticArea.document?.name ?? semanticArea.identity
+    }));
+
+    for (const [index, workflowRef] of asArray(semanticArea.document?.workflows).entries()) {
+      const workflowIdentity = referenceIdentity(workflowRef, ['workflow', 'ref', 'identity', 'id', 'name']);
+      if (!workflowIdentity) {
+        continue;
+      }
+
+      entries.push(sourceMapEntry({
+        diagramId: safeDiagramId('workflow', workflowIdentity),
+        role: 'target',
+        scope: 'workflows',
+        identity: workflowIdentity,
+        fieldPath: `workflows[${index}]`,
+        label: workflowIdentity
+      }));
+
+      entries.push(sourceMapEntry({
+        diagramId: safeDiagramId('semantic-area-workflow', `${semanticArea.identity}-${index}-${workflowIdentity}`),
+        role: 'edge',
+        scope: 'semantic-areas',
+        identity: semanticArea.identity,
+        fieldPath: `workflows[${index}]`,
+        label: `${semanticArea.identity} → ${workflowIdentity}`
       }));
     }
   }

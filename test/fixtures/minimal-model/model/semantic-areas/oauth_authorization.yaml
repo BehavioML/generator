@@ -1,0 +1,13 @@
+name: OAuth authorization
+description: >-
+  Behavior area covering the OAuth authorization request flow.
+workflows:
+  - client/start_authorization
+  - client_start
+  - missing/workflow
+owns:
+  - should/not/be/used
+model_refs:
+  - workflows:should/not/be/used
+components:
+  - auth_server

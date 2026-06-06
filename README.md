@@ -8,7 +8,7 @@ This project is intentionally small. It is not a renderer, editor, schema valida
 
 `@behavioml/generator` is experimental. Generated diagrams are derived artifacts and are not a source of truth.
 
-The generator does not validate models. Run @behavioml/validator first.
+The generator does not validate models, including semantic-area correctness. Run @behavioml/validator first.
 
 ## Relationship to BehavioML/specifications
 
@@ -88,7 +88,7 @@ Public SDK exports:
 - `generateMermaid(model, view, options)` — lower-level Mermaid text generation for an already-loaded model.
 - `SUPPORTED_VIEWS`, `DEFAULT_GENERATOR_ARTIFACTS`, and `GENERATOR_ARTIFACT_FORMATS` — supported view/artifact metadata.
 
-Workspace files use the same scope and identity rules as CLI model loading. Files under `generated` are ignored. Supported artifact filters are the view names documented below and `workflow-sequence:<workflow-id>` for a single workflow sequence artifact. Mermaid is currently the only generated artifact format; unsupported requested formats are reported as diagnostics.
+Workspace files use the same scope and identity rules as CLI model loading. Files under `generated` are ignored. Supported artifact filters are the view names documented below, `workflow-sequence:<workflow-id>` for a single workflow sequence artifact, and `semantic-area-workflows:<semantic-area-id>` for a selected semantic-area relationship graph. Mermaid is currently the only generated artifact format; unsupported requested formats are reported as diagnostics.
 
 Generated SDK artifacts may also include a `sourceMap` array. This metadata is owned by the generator and maps stable, Mermaid/SVG-safe diagram element identifiers back to BehavioML path identities and, when applicable, specific source fields such as `steps[0].capability`. Consumers such as BehavioML Explorer should use `sourceMap` when making browser-rendered Mermaid SVG diagrams clickable: the generator owns BehavioML-to-diagram semantics, diagram element identity, and model source mapping, while Explorer or another consumer owns Mermaid rendering, SVG DOM event handling, and navigation. Consumers should not infer BehavioML semantics from raw Mermaid text or from rendered SVG heuristics.
 
@@ -231,6 +231,31 @@ behavioml-generate examples/oauth-authorization-code/model --format mermaid --vi
 
 All entities and all state machines are emitted as nodes. Entities without state machines remain visible as isolated nodes. Missing entity references are rendered as placeholder nodes instead of failing generation.
 
+
+#### `semantic-area-workflows`
+
+Shows `SemanticArea -> Workflow` relationships from each semantic area's direct top-level `workflows` list.
+
+```bash
+behavioml-generate examples/quic/model --format mermaid --view semantic-area-workflows
+```
+
+Semantic-area workflow graphs are inspection/navigation views, not executable flow diagrams. They do not render workflow steps, sequence messages, capabilities, entities, events, state machines, modules, components, or inferred ownership. Missing workflow references are rendered as placeholder nodes instead of failing generation.
+
+Semantic areas organize behavior; modules organize components. A semantic-area file lives under `semantic-areas/`. The directory scope determines that the entity is a semantic area, so files do not need a `kind` field. The currently supported shape is:
+
+```yaml
+name: Protected packet receive
+description: >-
+  Behavior area covering receive-side processing of protected packets.
+
+workflows:
+  - packet/endpoint/receive_protected_packet
+  - packet/endpoint/remove_header_protection
+```
+
+The generator treats `workflows` as the only semantic-area relationship field. It intentionally does not support `owns`, `model_refs`, component references, or directory-inferred workflow ownership for semantic-area generation. Validation of duplicate ownership, missing references, unsupported fields, and broader semantic-area correctness belongs to `@behavioml/validator`, which should be run before generation.
+
 ## Model loading
 
 The generator loads `.yaml` and `.yml` files from these known scopes:
@@ -245,6 +270,7 @@ The generator loads `.yaml` and `.yml` files from these known scopes:
 - `entities`
 - `state-machines`
 - `decisions`
+- `semantic-areas`
 
 The `generated` directory is ignored. Identity is derived from the path inside each scope without the YAML extension. For example:
 
@@ -274,6 +300,7 @@ Use relationship graph views when inspecting or debugging model relationships:
 behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-capabilities
 behavioml-generate examples/oauth-authorization-code/model --format mermaid --view capability-events
 behavioml-generate examples/oauth-authorization-code/model --format mermaid --view entity-state-machines
+behavioml-generate examples/quic/model --format mermaid --view semantic-area-workflows
 ```
 
 Generated output is plain Mermaid text and can be pasted into any Mermaid-compatible viewer.

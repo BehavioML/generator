@@ -8,7 +8,8 @@ export const MODEL_SCOPES = [
   'events',
   'entities',
   'state-machines',
-  'decisions'
+  'decisions',
+  'semantic-areas'
 ];
 
 export const YAML_EXTENSIONS = new Set(['.yaml', '.yml']);

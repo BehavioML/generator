@@ -88,6 +88,87 @@ test('entity-state-machines output contains missing entity placeholders', async 
   assert.match(output, /E_missing_entity --> SM_orphaned/);
 });
 
+
+test('model loading includes semantic-area files from semantic-areas without kind', async () => {
+  const model = await loadModel(fixtureModel);
+
+  assert.equal(model['semantic-areas'].has('oauth_authorization'), true);
+  assert.equal(model['semantic-areas'].get('oauth_authorization').document.kind, undefined);
+  assert.equal(model['semantic-areas'].has('generated/ignored'), false);
+});
+
+test('semantic-area identities are path-based within the semantic-areas scope', async () => {
+  const model = await loadModel(fixtureModel);
+
+  assert.equal(model['semantic-areas'].has('packet/receive'), true);
+  assert.equal(model['semantic-areas'].get('packet/receive').identity, 'packet/receive');
+});
+
+test('semantic-area-workflows output contains semantic area to workflow edges', async () => {
+  const model = await loadModel(fixtureModel);
+  const output = generateMermaid(model, 'semantic-area-workflows');
+
+  assert.match(output, /SA_oauth_authorization\["semantic-area: oauth_authorization"\]/);
+  assert.match(output, /W_client_start_authorization\["workflow: client\/start_authorization"\]/);
+  assert.match(output, /SA_oauth_authorization --> W_client_start_authorization/);
+  assert.match(output, /SA_packet_receive --> W_empty/);
+});
+
+test('semantic-area-workflows renders missing workflow placeholders', async () => {
+  const model = await loadModel(fixtureModel);
+  const output = generateMermaid(model, 'semantic-area-workflows');
+
+  assert.match(output, /W_missing_workflow\["missing workflow: missing\/workflow"\]/);
+  assert.match(output, /SA_oauth_authorization --> W_missing_workflow/);
+});
+
+test('semantic-area-workflows ignores unsupported legacy fields as generator semantics', async () => {
+  const model = await loadModel(fixtureModel);
+  const output = generateMermaid(model, 'semantic-area-workflows');
+
+  assert.doesNotMatch(output, /should\/not\/be\/used/);
+  assert.doesNotMatch(output, /auth_server/);
+  assert.doesNotMatch(output, /components?/);
+});
+
+test('SDK semantic-area-workflows artifacts include source-map metadata', async () => {
+  const files = await fixtureWorkspaceFiles();
+  const [artifact] = await generateWorkspaceArtifacts(files, {
+    artifacts: ['semantic-area-workflows:oauth_authorization'],
+    formats: ['mermaid']
+  });
+
+  assert.equal(artifact.kind, 'semantic-area-workflows');
+  assert.equal(artifact.path, 'generated/semantic-areas/oauth_authorization.mmd');
+  assert.deepEqual(artifact.sourceEntity, { kind: 'semantic-area', id: 'oauth_authorization' });
+  assert.match(artifact.content, /SA_oauth_authorization --> W_client_start_authorization/);
+  assert.doesNotMatch(artifact.content, /SA_packet_receive/);
+
+  assert.equal(findSourceMapEntry(artifact.sourceMap, {
+    role: 'entity',
+    scope: 'semantic-areas',
+    identity: 'oauth_authorization'
+  }).diagramId, 'semantic-area-oauth-authorization');
+  assert.equal(findSourceMapEntry(artifact.sourceMap, {
+    role: 'target',
+    scope: 'workflows',
+    identity: 'client/start_authorization',
+    fieldPath: 'workflows[0]'
+  }).diagramId, 'workflow-client-start-authorization');
+  assert.equal(findSourceMapEntry(artifact.sourceMap, {
+    role: 'edge',
+    scope: 'semantic-areas',
+    identity: 'oauth_authorization',
+    fieldPath: 'workflows[0]'
+  }).diagramId, 'semantic-area-workflow-oauth-authorization-0-client-start-authorization');
+  assert.equal(findSourceMapEntry(artifact.sourceMap, {
+    role: 'target',
+    scope: 'workflows',
+    identity: 'missing/workflow',
+    fieldPath: 'workflows[2]'
+  }).label, 'missing/workflow');
+});
+
 test('CLI exits 2 for unknown view', () => {
   const result = spawnSync(process.execPath, [cli, fixtureModel, '--format', 'mermaid', '--view', 'unknown'], {
     encoding: 'utf8'
@@ -242,12 +323,16 @@ test('SDK workspace model loading ignores generated files and derives scoped ide
   const model = loadWorkspaceModel([
     { path: 'model/workflows/client/start_authorization.yaml', content: 'steps: []' },
     { path: 'model/workflows/generated/ignored.yaml', content: 'steps: []' },
-    { path: 'model/capabilities/oauth/build_authorization_request.yml', content: 'name: Build authorization request' }
+    { path: 'model/capabilities/oauth/build_authorization_request.yml', content: 'name: Build authorization request' },
+    { path: 'model/semantic-areas/oauth_authorization.yaml', content: 'workflows: []' },
+    { path: 'model/semantic-areas/generated/ignored.yaml', content: 'workflows: []' }
   ]);
 
   assert.equal(model.workflows.has('client/start_authorization'), true);
   assert.equal(model.workflows.has('generated/ignored'), false);
   assert.equal(model.capabilities.has('oauth/build_authorization_request'), true);
+  assert.equal(model['semantic-areas'].has('oauth_authorization'), true);
+  assert.equal(model['semantic-areas'].has('generated/ignored'), false);
 });
 
 test('SDK returns artifact diagnostics instead of throwing for generation errors', async () => {

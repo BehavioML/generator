@@ -32,7 +32,7 @@ import { generateSourceMap } from './source-map.js';
  * @property {string=} label Human-readable label associated with the diagram element.
  *
  * @typedef {object} GenerateWorkspaceArtifactsOptions
- * @property {readonly string[]=} artifacts Artifact kinds to generate. Use a view name or `workflow-sequence:<workflow-id>`.
+ * @property {readonly string[]=} artifacts Artifact kinds to generate. Use a view name, `workflow-sequence:<workflow-id>`, or `semantic-area-workflows:<semantic-area-id>`.
  * @property {readonly GeneratorArtifactFormat[]=} formats Requested output formats. Mermaid is currently the only generatable format.
  * @property {string=} workflow Workflow identity used when generating a single workflow-sequence artifact.
  * @property {'one-level' | 'recursive' | 'none' | boolean=} expandUses Workflow sequence Capability.uses expansion mode.
@@ -44,7 +44,8 @@ export const DEFAULT_GENERATOR_ARTIFACTS = Object.freeze([
   'state-machines',
   'workflow-capabilities',
   'capability-events',
-  'entity-state-machines'
+  'entity-state-machines',
+  'semantic-area-workflows'
 ]);
 
 /**
@@ -123,6 +124,12 @@ function generateRequestedMermaidArtifacts(model, artifact, options) {
     return [generateSingleArtifact(model, 'workflow-sequence', { workflow, expandUses: options.expandUses })];
   }
 
+  const semanticAreaPrefix = 'semantic-area-workflows:';
+  if (artifact.startsWith(semanticAreaPrefix)) {
+    const semanticArea = artifact.slice(semanticAreaPrefix.length);
+    return [generateSingleArtifact(model, 'semantic-area-workflows', { semanticArea })];
+  }
+
   if (!SUPPORTED_VIEWS.has(artifact)) {
     return [diagnosticArtifact({
       message: `Unsupported artifact: ${artifact}`,
@@ -191,6 +198,10 @@ function artifactPath(kind, options) {
     return `generated/workflows/${options.workflow}.mmd`;
   }
 
+  if (kind === 'semantic-area-workflows' && options.semanticArea) {
+    return `generated/semantic-areas/${options.semanticArea}.mmd`;
+  }
+
   return `generated/${kind}.mmd`;
 }
 
@@ -199,12 +210,20 @@ function artifactTitle(kind, options) {
     return `Workflow sequence: ${options.workflow}`;
   }
 
+  if (kind === 'semantic-area-workflows' && options.semanticArea) {
+    return `Semantic area workflows: ${options.semanticArea}`;
+  }
+
   return kind;
 }
 
 function sourceEntityFor(kind, options) {
   if (kind === 'workflow-sequence' && options.workflow) {
     return { kind: 'workflow', id: options.workflow };
+  }
+
+  if (kind === 'semantic-area-workflows' && options.semanticArea) {
+    return { kind: 'semantic-area', id: options.semanticArea };
   }
 
   return undefined;
