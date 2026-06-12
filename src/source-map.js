@@ -74,6 +74,18 @@ function workflowSequenceSourceMap(model, workflowIdentity) {
       }));
     }
 
+    const workflowReferenceIdentity = workflowStepReferenceIdentity(step);
+    if (workflowReferenceIdentity) {
+      entries.push(sourceMapEntry({
+        diagramId: safeDiagramId('workflow-step-workflow', `${workflow.identity}-${index}-${workflowReferenceIdentity}`),
+        role: 'target',
+        scope: 'workflows',
+        identity: workflowReferenceIdentity,
+        fieldPath: `steps[${index}].workflow`,
+        label: workflowReferenceIdentity
+      }));
+    }
+
     if (typeof step.from === 'string' && step.from.length > 0) {
       entries.push(sourceMapEntry({
         diagramId: safeDiagramId('workflow-step-source', `${workflow.identity}-${index}-${step.from}`),
@@ -180,6 +192,19 @@ function workflowCapabilitiesSourceMap(model) {
     }));
 
     for (const [index, step] of asArray(workflow.document?.steps).entries()) {
+      const workflowReferenceIdentity = workflowStepReferenceIdentity(step);
+      if (workflowReferenceIdentity) {
+        entries.push(sourceMapEntry({
+          diagramId: safeDiagramId('workflow-composition', `${workflow.identity}-${index}-${workflowReferenceIdentity}`),
+          role: 'edge',
+          scope: 'workflows',
+          identity: workflowReferenceIdentity,
+          fieldPath: `steps[${index}].workflow`,
+          label: workflowReferenceIdentity
+        }));
+        continue;
+      }
+
       const capabilityIdentity = referenceIdentity(step, ['capability', 'ref', 'identity', 'id', 'name']);
       if (!capabilityIdentity) {
         continue;
@@ -314,6 +339,20 @@ function entityStateMachinesSourceMap(model) {
   }
 
   return entries;
+}
+
+
+function workflowStepReferenceIdentity(step) {
+  if (!step || typeof step !== 'object' || Array.isArray(step) || typeof step.workflow !== 'string') {
+    return undefined;
+  }
+
+  return step.workflow
+    .replace(/^workflows\//, '')
+    .replace(/\.ya?ml$/, '')
+    .split('/')
+    .filter(Boolean)
+    .join('/');
 }
 
 function sourceMapEntry({ diagramId, role, scope, identity, fieldPath, label }) {

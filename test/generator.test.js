@@ -609,6 +609,16 @@ async function fixtureWorkspaceFiles(directory = fixtureModel, prefix = 'model')
   return files;
 }
 
+
+function addWorkflow(model, identity, document) {
+  model.workflows.set(identity, {
+    scope: 'workflows',
+    identity,
+    file: `${fixtureModel}/workflows/${identity}.yaml`,
+    document
+  });
+}
+
 function addCapability(model, identity, document) {
   model.capabilities.set(identity, {
     scope: 'capabilities',
@@ -628,3 +638,323 @@ function workflowVariant(model, documentPatch) {
     }
   };
 }
+
+test('workflow-sequence collapsed composition renders child workflow reference and bound parent roles', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'protocol/request_response', {
+    roles: { primary: 'client', participants: ['server'] },
+    steps: [
+      { from: 'client', to: 'server', capability: 'protocol/send_request', label: 'Send request' },
+      { from: 'server', to: 'client', capability: 'protocol/send_response', label: 'Send response' }
+    ]
+  });
+  addWorkflow(model, 'aggregate/request_response', {
+    description: 'Aggregate request/response.',
+    steps: [
+      {
+        workflow: 'workflows/protocol/request_response',
+        bind: { client: 'browser', server: 'authorization_server' }
+      }
+    ]
+  });
+
+  const output = generateMermaid(model, 'workflow-sequence', { workflow: 'aggregate/request_response' });
+
+  assert.match(output, /participant browser as Browser/);
+  assert.match(output, /participant authorization_server as Authorization Server/);
+  assert.match(output, /Note over browser,authorization_server: Child workflow: workflows\/protocol\/request_response/);
+  assert.doesNotMatch(output, /Send request/);
+});
+
+test('workflow-sequence expanded composition rewrites child roles through bind', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'endpoint/receive_packet', {
+    roles: { primary: 'endpoint', participants: ['peer_endpoint'] },
+    steps: [
+      { from: 'endpoint', to: 'peer_endpoint', capability: 'packet/receive', label: 'Receive packet' }
+    ]
+  });
+  addWorkflow(model, 'aggregate/receive_packet', {
+    steps: [
+      {
+        workflow: 'workflows/endpoint/receive_packet',
+        bind: { endpoint: 'server', peer_endpoint: 'client' }
+      }
+    ]
+  });
+
+  const output = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'aggregate/receive_packet',
+    workflowComposition: 'expanded'
+  });
+
+  assert.match(output, /server->>client: Receive packet/);
+  assert.doesNotMatch(output, /endpoint->>peer_endpoint/);
+});
+
+test('workflow-sequence expanded composition supports same-name explicit binding and shorthand workflow references', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'protocol/request_response', {
+    roles: { primary: 'client', participants: ['server'] },
+    steps: [
+      { from: 'client', to: 'server', capability: 'protocol/send_request', label: 'Send request' }
+    ]
+  });
+  addWorkflow(model, 'aggregate/same_name', {
+    steps: [
+      { workflow: 'protocol/request_response', bind: { client: 'client', server: 'server' } }
+    ]
+  });
+
+  const output = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'aggregate/same_name',
+    workflowComposition: 'expanded'
+  });
+
+  assert.match(output, /client->>server: Send request/);
+});
+
+test('workflow-sequence expanded composition allows same child twice with different bindings', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'endpoint/receive_packet', {
+    steps: [
+      { from: 'endpoint', to: 'peer_endpoint', capability: 'packet/receive', label: 'Receive packet' }
+    ]
+  });
+  addWorkflow(model, 'aggregate/two_directions', {
+    steps: [
+      { workflow: 'workflows/endpoint/receive_packet', bind: { endpoint: 'server', peer_endpoint: 'client' } },
+      { workflow: 'workflows/endpoint/receive_packet', bind: { endpoint: 'client', peer_endpoint: 'server' } }
+    ]
+  });
+
+  const output = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'aggregate/two_directions',
+    workflowComposition: 'expanded'
+  });
+
+  assert.match(output, /server->>client: Receive packet/);
+  assert.match(output, /client->>server: Receive packet/);
+});
+
+test('workflow-sequence expanded composition allows same child from two different parents', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'endpoint/receive_packet', {
+    steps: [
+      { from: 'endpoint', to: 'peer_endpoint', capability: 'packet/receive', label: 'Receive packet' }
+    ]
+  });
+  addWorkflow(model, 'aggregate/server_receive', {
+    steps: [
+      { workflow: 'workflows/endpoint/receive_packet', bind: { endpoint: 'server', peer_endpoint: 'client' } }
+    ]
+  });
+  addWorkflow(model, 'aggregate/client_receive', {
+    steps: [
+      { workflow: 'workflows/endpoint/receive_packet', bind: { endpoint: 'client', peer_endpoint: 'server' } }
+    ]
+  });
+
+  const serverOutput = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'aggregate/server_receive',
+    workflowComposition: 'expanded'
+  });
+  const clientOutput = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'aggregate/client_receive',
+    workflowComposition: 'expanded'
+  });
+
+  assert.match(serverOutput, /server->>client: Receive packet/);
+  assert.match(clientOutput, /client->>server: Receive packet/);
+});
+
+test('workflow-sequence expanded composition supports nested workflow references compositionally', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'grandchild', {
+    steps: [
+      { from: 'local_endpoint', to: 'remote_endpoint', capability: 'packet/receive', label: 'Receive packet' }
+    ]
+  });
+  addWorkflow(model, 'child', {
+    steps: [
+      {
+        workflow: 'workflows/grandchild',
+        bind: { local_endpoint: 'endpoint', remote_endpoint: 'peer_endpoint' }
+      }
+    ]
+  });
+  addWorkflow(model, 'parent', {
+    steps: [
+      {
+        workflow: 'workflows/child',
+        bind: { endpoint: 'server', peer_endpoint: 'client' }
+      }
+    ]
+  });
+
+  const output = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'parent',
+    workflowComposition: 'expanded'
+  });
+
+  assert.match(output, /server->>client: Receive packet/);
+  assert.doesNotMatch(output, /local_endpoint/);
+  assert.doesNotMatch(output, /remote_endpoint/);
+});
+
+test('workflow-capabilities output includes workflow composition edges without treating references as capabilities', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'protocol/request_response', {
+    steps: [
+      { from: 'client', to: 'server', capability: 'protocol/send_request', label: 'Send request' }
+    ]
+  });
+  addWorkflow(model, 'aggregate/request_response', {
+    steps: [
+      { workflow: 'workflows/protocol/request_response', bind: { client: 'browser', server: 'authorization_server' } }
+    ]
+  });
+
+  const output = generateMermaid(model, 'workflow-capabilities');
+
+  assert.match(output, /W_aggregate_request_response --> W_protocol_request_response/);
+  assert.doesNotMatch(output, /C_workflows_protocol_request_response/);
+});
+
+test('workflow-sequence reports unresolved child workflow references', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'aggregate/missing_child', {
+    steps: [
+      { workflow: 'workflows/missing/child', bind: { client: 'client' } }
+    ]
+  });
+
+  assert.throws(() => generateMermaid(model, 'workflow-sequence', { workflow: 'aggregate/missing_child' }), /Unresolved child workflow reference "workflows\/missing\/child"/);
+});
+
+test('workflow-sequence reports missing bind on workflow reference steps', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'child/missing_bind', {
+    steps: [
+      { from: 'client', capability: 'protocol/local', label: 'Local' }
+    ]
+  });
+  addWorkflow(model, 'aggregate/missing_bind', {
+    steps: [
+      { workflow: 'workflows/child/missing_bind' }
+    ]
+  });
+
+  assert.throws(() => generateMermaid(model, 'workflow-sequence', { workflow: 'aggregate/missing_bind' }), /requires bind/);
+});
+
+test('workflow-sequence reports empty and non-mapping bind on workflow reference steps', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'child/bind_validation', {
+    steps: [
+      { from: 'client', capability: 'protocol/local', label: 'Local' }
+    ]
+  });
+  addWorkflow(model, 'aggregate/empty_bind', {
+    steps: [
+      { workflow: 'workflows/child/bind_validation', bind: {} }
+    ]
+  });
+  addWorkflow(model, 'aggregate/non_mapping_bind', {
+    steps: [
+      { workflow: 'workflows/child/bind_validation', bind: ['client'] }
+    ]
+  });
+
+  assert.throws(() => generateMermaid(model, 'workflow-sequence', { workflow: 'aggregate/empty_bind' }), /requires non-empty bind/);
+  assert.throws(() => generateMermaid(model, 'workflow-sequence', { workflow: 'aggregate/non_mapping_bind' }), /requires bind to be a mapping/);
+});
+
+test('workflow-sequence expanded composition reports missing child role mappings', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'child/missing_role', {
+    steps: [
+      { from: 'client', to: 'server', capability: 'protocol/send_request', label: 'Send request' }
+    ]
+  });
+  addWorkflow(model, 'aggregate/missing_role', {
+    steps: [
+      { workflow: 'workflows/child/missing_role', bind: { client: 'browser' } }
+    ]
+  });
+
+  assert.throws(() => generateMermaid(model, 'workflow-sequence', {
+    workflow: 'aggregate/missing_role',
+    workflowComposition: 'expanded'
+  }), /Missing bind for child role "server"/);
+});
+
+test('workflow-sequence expanded composition detects direct cycles without infinite recursion', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'cycle/direct', {
+    steps: [
+      { workflow: 'workflows/cycle/direct', bind: { client: 'client' } }
+    ]
+  });
+
+  const output = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'cycle/direct',
+    workflowComposition: 'expanded'
+  });
+
+  assert.match(output, /cycle detected/);
+});
+
+test('workflow-sequence expanded composition detects indirect cycles without infinite recursion', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'cycle/a', {
+    steps: [
+      { workflow: 'workflows/cycle/b', bind: { client: 'client' } }
+    ]
+  });
+  addWorkflow(model, 'cycle/b', {
+    steps: [
+      { workflow: 'workflows/cycle/c', bind: { client: 'client' } }
+    ]
+  });
+  addWorkflow(model, 'cycle/c', {
+    steps: [
+      { workflow: 'workflows/cycle/a', bind: { client: 'client' } }
+    ]
+  });
+
+  const output = generateMermaid(model, 'workflow-sequence', {
+    workflow: 'cycle/a',
+    workflowComposition: 'expanded'
+  });
+
+  assert.match(output, /cycle detected/);
+});
+
+test('workflow-sequence rejects workflow reference steps mixed with capability/from/to/label fields', async () => {
+  const model = await loadModel(fixtureModel);
+  addWorkflow(model, 'child/mixed', {
+    steps: [
+      { from: 'client', capability: 'protocol/local', label: 'Local' }
+    ]
+  });
+  addWorkflow(model, 'aggregate/mixed_capability', {
+    steps: [
+      { workflow: 'workflows/child/mixed', bind: { client: 'client' }, capability: 'protocol/local' }
+    ]
+  });
+  addWorkflow(model, 'aggregate/mixed_roles', {
+    steps: [
+      { workflow: 'workflows/child/mixed', bind: { client: 'client' }, from: 'client', to: 'server' }
+    ]
+  });
+  addWorkflow(model, 'aggregate/mixed_label', {
+    steps: [
+      { workflow: 'workflows/child/mixed', bind: { client: 'client' }, label: 'Mixed label' }
+    ]
+  });
+
+  assert.throws(() => generateMermaid(model, 'workflow-sequence', { workflow: 'aggregate/mixed_capability' }), /must not include capability/);
+  assert.throws(() => generateMermaid(model, 'workflow-sequence', { workflow: 'aggregate/mixed_roles' }), /must not include from, to/);
+  assert.throws(() => generateMermaid(model, 'workflow-sequence', { workflow: 'aggregate/mixed_label' }), /must not include label/);
+});

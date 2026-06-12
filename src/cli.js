@@ -38,7 +38,8 @@ export async function runCli(argv, io = process) {
     const [artifact] = generateModelArtifacts(model, {
       artifacts: [parsed.view],
       workflow: parsed.workflow,
-      expandUses: parsed.expandUses
+      expandUses: parsed.expandUses,
+      workflowComposition: parsed.workflowComposition
     });
     const diagnostic = artifact?.diagnostics?.[0];
     if (diagnostic) {
@@ -69,6 +70,7 @@ export function parseArgs(argv) {
     output: undefined,
     workflow: undefined,
     expandUses: undefined,
+    workflowComposition: undefined,
     help: false,
     error: undefined
   };
@@ -118,6 +120,14 @@ export function parseArgs(argv) {
       continue;
     }
 
+    if (arg === '--workflow-composition') {
+      result.workflowComposition = readWorkflowCompositionValue(args, arg, result);
+      if (result.error) {
+        return result;
+      }
+      continue;
+    }
+
     if (arg?.startsWith('--')) {
       result.error = `Unknown option: ${arg}`;
       return result;
@@ -157,6 +167,20 @@ function readOptionalExpandUsesValue(args) {
   return 'one-level';
 }
 
+function readWorkflowCompositionValue(args, option, result) {
+  const value = readOptionValue(args, option, result);
+  if (result.error) {
+    return undefined;
+  }
+
+  if (value !== 'collapsed' && value !== 'expanded') {
+    result.error = `Unsupported workflow composition mode: ${value}`;
+    return undefined;
+  }
+
+  return value;
+}
+
 function readOptionValue(args, option, result) {
   const value = args.shift();
   if (!value || value.startsWith('--')) {
@@ -171,7 +195,7 @@ function readOptionValue(args, option, result) {
 }
 
 function usageText() {
-  return 'Usage: behavioml-generate <model-dir> --format mermaid --view <view> [--workflow <workflow>] [--expand-uses [one-level|recursive]] [--output <file>]';
+  return 'Usage: behavioml-generate <model-dir> --format mermaid --view <view> [--workflow <workflow>] [--expand-uses [one-level|recursive]] [--workflow-composition collapsed|expanded] [--output <file>]';
 }
 
 function helpText() {
@@ -194,12 +218,14 @@ Supported views:
 Optional:
   --workflow <workflow>                    Workflow identity for workflow-sequence, relative to workflows/ without .yaml.
   --expand-uses [one-level|recursive]      Expand ordered Capability.uses under workflow-sequence steps. Defaults to one-level when the flag is present.
+  --workflow-composition collapsed|expanded Render child workflow reference steps collapsed or expanded. Defaults to collapsed.
   --output <file>                          Write Mermaid text to a file instead of stdout.
   --help, -h                               Show this help message.
 
 Examples:
   behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-sequence --workflow client/start_authorization
   behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-sequence --workflow client/start_authorization --expand-uses recursive
+  behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-sequence --workflow client/start_authorization --workflow-composition expanded
   behavioml-generate examples/oauth-authorization-code/model --format mermaid --view state-machines --output oauth-states.mmd
   npx @behavioml/generator examples/quic/model --format mermaid --view capability-events
   behavioml-generate examples/oauth-authorization-code/model --format mermaid --view entity-state-machines

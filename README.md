@@ -99,7 +99,7 @@ The CLI remains responsible for argument parsing, filesystem loading/writing, an
 ## CLI usage
 
 ```bash
-behavioml-generate <model-dir> --format mermaid --view <view> [--workflow <workflow>] [--expand-uses [one-level|recursive]] [--output <file>]
+behavioml-generate <model-dir> --format mermaid --view <view> [--workflow <workflow>] [--expand-uses [one-level|recursive]] [--workflow-composition collapsed|expanded] [--output <file>]
 ```
 
 Required options:
@@ -111,6 +111,7 @@ Optional options:
 
 - `--workflow <workflow>` — workflow identity for `workflow-sequence`, relative to `workflows/` and without `.yaml`.
 - `--expand-uses [one-level|recursive]` — for `workflow-sequence`, expand ordered `Capability.uses` under each workflow step. A bare `--expand-uses` is equivalent to `--expand-uses one-level`.
+- `--workflow-composition collapsed|expanded` — for `workflow-sequence`, render child workflow reference steps as collapsed aggregate notes or expand the referenced child workflow steps in place. The default is `collapsed`.
 - `--output <file>` — write Mermaid text to a file instead of stdout.
 - `--help` / `-h` — show usage and examples.
 
@@ -187,6 +188,51 @@ Use `--expand-uses` or `--expand-uses one-level` to add a note under each workfl
 
 Expanded uses represent **ordered internal decomposition**. They do **not** represent role interactions, messages, callbacks, or inferred control flow, and they are not rendered as independent role-to-role messages.
 
+##### Aggregated workflows
+
+Workflow sequence diagrams support the minimal aggregated workflow step shape proposed in `BehavioML/specifications` design note `0009-aggregated-workflows`:
+
+```yaml
+steps:
+  - workflow: workflows/protocol/request_response
+    bind:
+      client: browser
+      server: authorization_server
+```
+
+A step with `workflow` is a child workflow reference, not a capability reference. The `bind` mapping is evaluated at the composition site and maps child workflow role names to roles in the parent/aggregate workflow. Child workflow files are not mutated or flattened back into the source model.
+
+Supported child workflow reference forms are:
+
+- `workflows/foo/bar` — preferred form.
+- `foo/bar` — shorthand identity relative to `model/workflows/`.
+
+Both forms resolve to workflow files under `model/workflows/` by path identity, without introducing a top-level workflow `id`. Optional `.yaml` or `.yml` suffixes are also normalized if present.
+
+By default, `workflow-sequence` uses collapsed composition mode. In collapsed mode, each child workflow reference renders as one aggregate note over the bound parent roles, such as:
+
+```mermaid
+sequenceDiagram
+  participant browser as Browser
+  participant authorization_server as Authorization Server
+
+  Note over browser,authorization_server: Child workflow: workflows/protocol/request_response
+```
+
+Use expanded composition mode to render child workflow object steps in place:
+
+```bash
+behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-sequence --workflow aggregate/request_response --workflow-composition expanded
+```
+
+Expanded mode rewrites child `from` and `to` role names through `bind`, preserves child step order, preserves capability references and labels, and supports nested workflow references with composed bindings. If a child role used during expansion is not bound, generation fails with a diagnostic instead of guessing a same-name mapping.
+
+Composition cycle protection is defensive. In expanded mode, recursive workflow references stop at the cycle and render a collapsed cycle marker instead of recursing indefinitely. Collapsed mode validates the directly referenced child workflow and bind shape but does not expand child internals.
+
+Workflow reference steps must not mix `workflow` with direct capability-step fields (`from`, `to`, `capability`, or `label`). The generator emits diagnostics for malformed reference steps, unresolved child workflows, missing or non-mapping `bind`, empty `bind`, missing role mappings during expansion, and unsupported mixed step shapes.
+
+The generator does not add support for aggregate-only fields such as `main`, `variants`, `cases`, or `outcome`, and it does not introduce review-view entities.
+
 #### `state-machines`
 
 Shows BehavioML state machines as Mermaid `stateDiagram-v2` diagrams.
@@ -203,7 +249,7 @@ These relationship graph views remain available for model inspection and debuggi
 
 #### `workflow-capabilities`
 
-Shows `Workflow -> Capability` relationships from workflow `steps`.
+Shows `Workflow -> Capability` relationships from capability workflow steps and `Workflow -> Workflow` composition relationships from aggregated workflow reference steps.
 
 ```bash
 behavioml-generate examples/oauth-authorization-code/model --format mermaid --view workflow-capabilities
