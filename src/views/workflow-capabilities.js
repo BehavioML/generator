@@ -12,6 +12,18 @@ export function generateWorkflowCapabilities(model) {
 
     const steps = asArray(workflow.document?.steps);
     for (const step of steps) {
+      if (isWorkflowReferenceStep(step)) {
+        const childIdentity = resolveWorkflowReference(step.workflow);
+        const childWorkflow = model.workflows.get(childIdentity);
+        const childWorkflowId = safeNodeId('W', childIdentity);
+        const label = childWorkflow
+          ? `workflow: ${childIdentity}`
+          : `missing workflow: ${childIdentity}`;
+        emitNode(nodeLines, emittedNodes, childWorkflowId, label);
+        edgeLines.push(`  ${workflowId} --> ${childWorkflowId}`);
+        continue;
+      }
+
       const capabilityIdentity = referenceIdentity(step, ['capability', 'ref', 'identity', 'id', 'name']);
       if (!capabilityIdentity) {
         edgeLines.push(`  %% skipped workflow step without capability reference in ${workflow.identity}`);
@@ -29,6 +41,19 @@ export function generateWorkflowCapabilities(model) {
   }
 
   return [...lines, ...nodeLines, '', ...edgeLines].filter((line, index, all) => line !== '' || all[index + 1]).join('\n').trimEnd() + '\n';
+}
+
+function isWorkflowReferenceStep(step) {
+  return step && typeof step === 'object' && !Array.isArray(step) && typeof step.workflow === 'string' && step.workflow.length > 0;
+}
+
+function resolveWorkflowReference(reference) {
+  return String(reference ?? '')
+    .replace(/^workflows\//, '')
+    .replace(/\.ya?ml$/, '')
+    .split('/')
+    .filter(Boolean)
+    .join('/');
 }
 
 function emitNode(lines, emittedNodes, id, label) {

@@ -36,6 +36,7 @@ import { generateSourceMap } from './source-map.js';
  * @property {readonly GeneratorArtifactFormat[]=} formats Requested output formats. Mermaid is currently the only generatable format.
  * @property {string=} workflow Workflow identity used when generating a single workflow-sequence artifact.
  * @property {'one-level' | 'recursive' | 'none' | boolean=} expandUses Workflow sequence Capability.uses expansion mode.
+ * @property {'collapsed' | 'expanded'=} workflowComposition Workflow reference rendering mode for workflow-sequence artifacts.
  */
 
 export const GENERATOR_ARTIFACT_FORMATS = new Set(['mermaid', 'markdown', 'json', 'text']);
@@ -121,7 +122,7 @@ function generateRequestedMermaidArtifacts(model, artifact, options) {
   const workflowPrefix = 'workflow-sequence:';
   if (artifact.startsWith(workflowPrefix)) {
     const workflow = artifact.slice(workflowPrefix.length);
-    return [generateSingleArtifact(model, 'workflow-sequence', { workflow, expandUses: options.expandUses })];
+    return [generateSingleArtifact(model, 'workflow-sequence', { workflow, expandUses: options.expandUses, workflowComposition: options.workflowComposition })];
   }
 
   const semanticAreaPrefix = 'semantic-area-workflows:';
@@ -144,13 +145,15 @@ function generateWorkflowSequenceArtifacts(model, options) {
   if (options.workflow) {
     return [generateSingleArtifact(model, 'workflow-sequence', {
       workflow: options.workflow,
-      expandUses: options.expandUses
+      expandUses: options.expandUses,
+      workflowComposition: options.workflowComposition
     })];
   }
 
   return [...model.workflows.keys()].map((workflow) => generateSingleArtifact(model, 'workflow-sequence', {
     workflow,
-    expandUses: options.expandUses
+    expandUses: options.expandUses,
+    workflowComposition: options.workflowComposition
   }));
 }
 
